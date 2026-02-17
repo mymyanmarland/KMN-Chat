@@ -244,7 +244,14 @@ async function send(){
       for(const ev of events){
         const l=ev.split('\n').find(x=>x.startsWith('data: ')); if(!l) continue;
         const d=l.slice(6).trim(); if(d==='[DONE]') continue;
-        try{const j=JSON.parse(d); const token=j?.choices?.[0]?.delta?.content||''; if(token) out.textContent+=token;}catch{}
+        try{
+          const j=JSON.parse(d);
+          let token='';
+          if (j && j.choices && j.choices[0] && j.choices[0].delta && typeof j.choices[0].delta.content === 'string') {
+            token = j.choices[0].delta.content;
+          }
+          if(token) out.textContent+=token;
+        }catch(e){}
       }
       term.scrollTop=term.scrollHeight;
     }
