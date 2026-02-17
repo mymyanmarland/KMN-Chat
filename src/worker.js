@@ -216,25 +216,25 @@ async function loadModels(){
   setStatus("loading models...");
   try{
     const res=await fetch('/api/models'); const data=await res.json();
-    if(!res.ok) throw new Error(data.error||`HTTP ${res.status}`);
+    if(!res.ok) throw new Error(data.error||('HTTP '+res.status));
     modelEl.innerHTML='';
-    (data.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=`${m.name} [${m.id}]`;modelEl.appendChild(o);});
+    (data.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=(m.name+' ['+m.id+']');modelEl.appendChild(o);});
     setStatus(data.fallback?"models loaded (fallback)":"models loaded");
-  }catch(e){ setStatus('model load error'); line('e',`[ERROR] ${e.message}`); }
+  }catch(e){ setStatus('model load error'); line('e','[ERROR] '+e.message); }
 }
 
 async function send(){
   const prompt=promptEl.value.trim(); const model=modelEl.value;
   if(!prompt) return;
   if(!model){ line('e','[ERROR] no model selected'); return; }
-  line('u',`> ${prompt}`); promptEl.value='';
+  line('u','> '+prompt); promptEl.value='';
   const out=line('a','');
   sendBtn.disabled=true;
 
   try{
     const res=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model,prompt})});
     if(!res.ok||!res.body){
-      const err=await res.json().catch(()=>({})); throw new Error(err.error||`HTTP ${res.status}`);
+      const err=await res.json().catch(()=>({})); throw new Error(err.error||('HTTP '+res.status));
     }
 
     const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
@@ -250,7 +250,7 @@ async function send(){
       term.scrollTop=term.scrollHeight;
     }
     setStatus('ready');
-  }catch(e){ line('e',`[ERROR] ${e.message}`); setStatus('request failed'); }
+  }catch(e){ line('e','[ERROR] '+e.message); setStatus('request failed'); }
   finally{ sendBtn.disabled=false; }
 }
 
