@@ -176,100 +176,141 @@ const INDEX_HTML = `<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ko Paing // Edge Terminal</title>
+  <title>KMN Chat</title>
   <style>
-    :root {
-      --bg:#030603; --panel:#081008; --text:#7CFF7C; --muted:#46a546; --accent:#00ff66; --err:#ff4d4d;
-      --font: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;display:flex;flex-direction:column}
-    header{position:relative;z-index:2;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px;border-bottom:1px solid #154215;background:var(--panel)}
-    #terminal{position:relative;z-index:2;flex:1;overflow:auto;padding:12px;white-space:pre-wrap;word-break:break-word}
-    .line{margin:0 0 10px}.u{color:#9cd7ff}.a{color:var(--text)}.e{color:var(--err)}
-    .row{position:relative;z-index:2;display:flex;gap:8px;padding:10px;border-top:1px solid #154215;background:var(--panel)}
-    select,textarea,button{background:#000;border:1px solid #1b501b;color:var(--text);font-family:var(--font)}
-    textarea{flex:1;min-height:68px;padding:8px} button,select{padding:8px}
-    @media (max-width:700px){.row{flex-direction:column}}
+    body{margin:0;background:#000;color:#7CFF7C;font-family:monospace}
+    .wrap{max-width:900px;margin:0 auto;padding:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    select,textarea,button{background:#050505;color:#7CFF7C;border:1px solid #1f5f1f;font-family:monospace}
+    textarea{width:100%;min-height:90px;padding:8px}
+    button,select{padding:8px}
+    #terminal{white-space:pre-wrap;word-break:break-word;min-height:50vh;border:1px solid #1f5f1f;padding:10px}
+    .u{color:#9cd7ff}.e{color:#ff6b6b}
   </style>
 </head>
 <body>
-  <header>
-    <strong>[ Ko Paing Edge Terminal ]</strong>
-    <span id="status" style="color:var(--muted)">loading models...</span>
-    <select id="model"></select>
-    <button id="reload">Reload</button>
-    <button id="clear">Clear</button>
-  </header>
-  <main id="terminal" role="log" aria-live="polite"></main>
-  <div class="row">
-    <textarea id="prompt" placeholder="Type prompt... Enter=send, Shift+Enter=newline"></textarea>
-    <button id="send">Send</button>
+  <div class="wrap">
+    <h3>KMN Chat // Ko Paing</h3>
+    <div id="status">loading models...</div>
+    <div class="row">
+      <select id="model"></select>
+      <button id="reload" type="button">Reload Models</button>
+      <button id="clear" type="button">Clear</button>
+    </div>
+    <div id="terminal" role="log" aria-live="polite"></div>
+    <div class="row" style="margin-top:10px">
+      <textarea id="prompt" placeholder="Type prompt... Enter=send, Shift+Enter=newline"></textarea>
+    </div>
+    <div class="row">
+      <button id="send" type="button">Send</button>
+    </div>
   </div>
 <script>
-const $ = (id) => document.getElementById(id);
-const term=$("terminal"), statusEl=$("status"), modelEl=$("model"), promptEl=$("prompt"), sendBtn=$("send");
-function line(cls, txt){const p=document.createElement("p");p.className='line '+cls;p.textContent=txt;term.appendChild(p);term.scrollTop=term.scrollHeight;return p;}
-function setStatus(t){statusEl.textContent=t}
+(function(){
+  function $(id){ return document.getElementById(id); }
+  var term=$("terminal"), statusEl=$("status"), modelEl=$("model"), promptEl=$("prompt"), sendBtn=$("send");
 
-async function loadModels(){
-  setStatus("loading models...");
-  try{
-    const res=await fetch('/api/models'); const data=await res.json();
-    if(!res.ok) throw new Error(data.error||('HTTP '+res.status));
-    modelEl.innerHTML='';
-    (data.models||[]).forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=(m.name+' ['+m.id+']');modelEl.appendChild(o);});
-    setStatus(data.fallback?"models loaded (fallback)":"models loaded");
-  }catch(e){ setStatus('model load error'); line('e','[ERROR] '+e.message); }
-}
-
-async function send(){
-  const prompt=promptEl.value.trim(); const model=modelEl.value;
-  if(!prompt) return;
-  if(!model){ line('e','[ERROR] no model selected'); return; }
-  line('u','> '+prompt); promptEl.value='';
-  const out=line('a','');
-  sendBtn.disabled=true;
-
-  try{
-    const res=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model,prompt})});
-    if(!res.ok||!res.body){
-      const err=await res.json().catch(()=>({})); throw new Error(err.error||('HTTP '+res.status));
-    }
-
-    const reader=res.body.getReader(); const dec=new TextDecoder(); let buf='';
-    while(true){
-      const {value,done}=await reader.read(); if(done) break;
-      buf+=dec.decode(value,{stream:true});
-      const events=buf.split('\n\n'); buf=events.pop()||'';
-      for(const ev of events){
-        const l=ev.split('\n').find(x=>x.startsWith('data: ')); if(!l) continue;
-        const d=l.slice(6).trim(); if(d==='[DONE]') continue;
-        try{
-          const j=JSON.parse(d);
-          let token='';
-          if (j && j.choices && j.choices[0] && j.choices[0].delta && typeof j.choices[0].delta.content === 'string') {
-            token = j.choices[0].delta.content;
-          }
-          if(token) out.textContent+=token;
-        }catch(e){}
-      }
-      term.scrollTop=term.scrollHeight;
-    }
-    setStatus('ready');
-  }catch(e){ line('e','[ERROR] '+e.message); setStatus('request failed'); }
-  finally{ sendBtn.disabled=false; }
-}
-
-$('reload').addEventListener('click', loadModels);
-$('clear').addEventListener('click', ()=>term.innerHTML='');
-sendBtn.addEventListener('click', send);
-promptEl.addEventListener('keydown',(e)=>{
-  const isEnter = (e.key === 'Enter' || e.keyCode === 13 || e.code === 'NumpadEnter');
-  if(isEnter && !e.shiftKey && !e.isComposing){
-    e.preventDefault();
-    send();
+  function line(cls, txt){
+    var p=document.createElement('div');
+    p.className=cls||'';
+    p.textContent=txt;
+    term.appendChild(p);
+    term.scrollTop=term.scrollHeight;
+    return p;
   }
-});
-loadModels(); promptEl.focus();
+  function setStatus(t){ statusEl.textContent=t; }
+
+  async function loadModels(){
+    setStatus('loading models...');
+    try{
+      var res=await fetch('/api/models');
+      var data=await res.json();
+      if(!res.ok) throw new Error(data.error||('HTTP '+res.status));
+      modelEl.innerHTML='';
+      (data.models||[]).forEach(function(m){
+        var o=document.createElement('option');
+        o.value=m.id;
+        o.textContent=(m.name||m.id)+' ['+m.id+']';
+        modelEl.appendChild(o);
+      });
+      setStatus('ready');
+    }catch(e){
+      setStatus('model load error');
+      line('e','[ERROR] '+e.message);
+    }
+  }
+
+  async function send(){
+    var prompt=(promptEl.value||'').trim();
+    var model=(modelEl.value||'').trim();
+    if(!prompt) return;
+    if(!model){ line('e','[ERROR] no model selected'); return; }
+
+    line('u','> '+prompt);
+    promptEl.value='';
+    var out=line('', '');
+    sendBtn.disabled=true;
+
+    try{
+      var res=await fetch('/api/chat',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({model:model,prompt:prompt})
+      });
+
+      if(!res.ok || !res.body){
+        var err=await res.json().catch(function(){return {};});
+        throw new Error(err.error||('HTTP '+res.status));
+      }
+
+      var reader=res.body.getReader();
+      var dec=new TextDecoder();
+      var buf='';
+      while(true){
+        var r=await reader.read();
+        if(r.done) break;
+        buf+=dec.decode(r.value,{stream:true});
+        var events=buf.split('\n\n');
+        buf=events.pop()||'';
+        for(var i=0;i<events.length;i++){
+          var ev=events[i];
+          var lines=ev.split('\n');
+          var dataLine='';
+          for(var j=0;j<lines.length;j++){
+            if(lines[j].indexOf('data: ')===0){ dataLine=lines[j].slice(6).trim(); break; }
+          }
+          if(!dataLine || dataLine==='[DONE]') continue;
+          try{
+            var json=JSON.parse(dataLine);
+            var token='';
+            if(json && json.choices && json.choices[0] && json.choices[0].delta && typeof json.choices[0].delta.content==='string'){
+              token=json.choices[0].delta.content;
+            }
+            if(token) out.textContent+=token;
+          }catch(_e){}
+        }
+        term.scrollTop=term.scrollHeight;
+      }
+      setStatus('ready');
+    }catch(e){
+      line('e','[ERROR] '+e.message);
+      setStatus('request failed');
+    }finally{
+      sendBtn.disabled=false;
+    }
+  }
+
+  $('reload').addEventListener('click', loadModels);
+  $('clear').addEventListener('click', function(){ term.innerHTML=''; });
+  sendBtn.addEventListener('click', send);
+  promptEl.addEventListener('keydown', function(e){
+    var isEnter = (e.key==='Enter' || e.keyCode===13 || e.code==='NumpadEnter');
+    if(isEnter && !e.shiftKey && !e.isComposing){ e.preventDefault(); send(); }
+  });
+
+  loadModels();
+  promptEl.focus();
+})();
 </script>
-</body></html>`;
+</body>
+</html>`;
