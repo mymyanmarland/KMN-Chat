@@ -209,7 +209,7 @@ const INDEX_HTML = `<!doctype html>
 <script>
 const $ = (id) => document.getElementById(id);
 const term=$("terminal"), statusEl=$("status"), modelEl=$("model"), promptEl=$("prompt"), sendBtn=$("send");
-function line(cls, txt){const p=document.createElement("p");p.className=`line ${cls}`;p.textContent=txt;term.appendChild(p);term.scrollTop=term.scrollHeight;return p;}
+function line(cls, txt){const p=document.createElement("p");p.className='line '+cls;p.textContent=txt;term.appendChild(p);term.scrollTop=term.scrollHeight;return p;}
 function setStatus(t){statusEl.textContent=t}
 
 async function loadModels(){
