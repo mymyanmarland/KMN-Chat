@@ -379,26 +379,26 @@ const INDEX_HTML = `<!doctype html>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>KMN Chat</title>
   <style>
-    :root{--bg:#0f0c08;--panel:#17120c;--line:#6e5a3a;--gold:#d9b46b;--ivory:#f3e6c9;--accent:#f0c674;--err:#ff7a7a;--info:#9bc8ff}
+    :root{--bg:#0b1220;--bg2:#111a2e;--glass:rgba(255,255,255,.10);--glass-strong:rgba(255,255,255,.16);--line:rgba(255,255,255,.22);--text:#eef4ff;--muted:#b9c7e6;--accent:#7dd3fc;--accent2:#a78bfa;--err:#ff9aa6;--info:#9fe7ff}
     *{box-sizing:border-box}
-    body{margin:0;background:radial-gradient(circle at top,#241a10,#0f0c08 55%);color:var(--ivory);font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
-    .wrap{max-width:960px;margin:22px auto;padding:14px;border:2px solid var(--line);background:linear-gradient(180deg,rgba(255,220,160,.04),rgba(0,0,0,.08));box-shadow:0 0 0 1px rgba(217,180,107,.2) inset}
-    h3{margin:0 0 10px;text-align:center;color:var(--gold);font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
-    #status{margin:0 0 10px;padding:6px 8px;border:1px solid var(--line);background:#120e09;color:var(--accent)}
+    body{margin:0;min-height:100vh;color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.2px;background:radial-gradient(1200px 600px at 10% -10%,#233a66 0%,transparent 45%),radial-gradient(900px 500px at 90% 0%,#3d2a69 0%,transparent 40%),linear-gradient(135deg,var(--bg),var(--bg2));}
+    .wrap{max-width:980px;margin:20px auto;padding:14px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(135deg,var(--glass),rgba(255,255,255,.06));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 12px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.16)}
+    h3{margin:0 0 10px;text-align:center;color:var(--text);font-weight:800;letter-spacing:.6px}
+    #status{margin:0 0 10px;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.08);color:var(--muted)}
     .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-    select,textarea,button{background:#120e09;color:var(--ivory);border:1px solid var(--line);font-family:Georgia,"Times New Roman",serif}
-    select,button{padding:8px 10px}
-    button{cursor:pointer}
-    button:hover{background:#1e1710;border-color:var(--gold)}
-    textarea{width:100%;min-height:90px;padding:10px;line-height:1.45}
-    #terminal{white-space:pre-wrap;word-break:break-word;min-height:50vh;border:1px solid var(--line);padding:12px;background:repeating-linear-gradient(180deg,#130f0a,#130f0a 30px,#151009 30px,#151009 31px)}
+    select,textarea,button{background:rgba(15,23,42,.55);color:var(--text);border:1px solid var(--line);border-radius:12px;font-family:inherit}
+    select,button{padding:10px 12px}
+    button{cursor:pointer;transition:.18s transform,.18s background,.18s border-color}
+    button:hover{transform:translateY(-1px);background:rgba(125,211,252,.16);border-color:var(--accent)}
+    textarea{width:100%;min-height:110px;padding:12px;line-height:1.55}
+    #terminal{white-space:pre-wrap;word-break:break-word;min-height:52vh;border:1px solid var(--line);border-radius:14px;padding:12px;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03))}
     .u{color:var(--info)}
     .e{color:var(--err)}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h3>KMN Chat · Art Deco Console</h3>
+    <h3>KMN Chat · Glass Console</h3>
     <div id="status">loading models...</div>
     <div class="row">
       <select id="model"></select>
