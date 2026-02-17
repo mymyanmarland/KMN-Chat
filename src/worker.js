@@ -21,6 +21,7 @@ export default {
     if (url.pathname === "/api/memory" && request.method === "POST") return handleMemoryPost(request, env);
     if (url.pathname === "/api/analytics/event" && request.method === "POST") return handleAnalyticsEventPost(request, env);
     if (url.pathname === "/api/analytics/summary" && request.method === "GET") return handleAnalyticsSummaryGet(request, env);
+    if (url.pathname === "/api/automation/trigger" && request.method === "POST") return handleAutomationTrigger(request, env);
     if (url.pathname === "/widget.js" && request.method === "GET") {
       return new Response(WIDGET_JS, { headers: { "content-type": "application/javascript; charset=utf-8", ...corsHeaders(request, env) } });
     }
@@ -271,6 +272,47 @@ async function handleAnalyticsSummaryGet(request, env) {
   }
 }
 
+async function handleAutomationTrigger(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: 'invalid json' }, 400, corsHeaders(request, env)); }
+  const text = String(body?.text || '').trim();
+  const model = String(body?.model || 'openai/gpt-4o-mini').trim();
+  const persona = String(body?.persona || 'support').trim();
+  const userId = String(body?.userId || 'automation').trim();
+  if (!text) return json({ ok: false, error: 'text required' }, 400, corsHeaders(request, env));
+  if (!env.OPEN_ROUTER_API_KEY) return json({ ok: false, error: 'OPEN_ROUTER_API_KEY missing' }, 500, corsHeaders(request, env));
+
+  try {
+    const upstream = await fetch(`${env.OPENROUTER_BASE_URL || DEFAULT_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: { ...openRouterHeaders(env), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages: [
+          { role: 'system', content: personaPrompt(persona) },
+          { role: 'user', content: text }
+        ]
+      })
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) return json({ ok: false, error: data }, upstream.status || 500, corsHeaders(request, env));
+    const answer = data?.choices?.[0]?.message?.content || '';
+
+    if (env.SUPABASE_URL && env.SUPABASE_ANON_KEY) {
+      await fetch(`${env.SUPABASE_URL}/rest/v1/analytics_events`, {
+        method: 'POST',
+        headers: { ...supabaseHeaders(env), Prefer: 'return=minimal' },
+        body: JSON.stringify([{ event_type: 'automation', user_id: userId, session_id: 'automation', node_id: 'webhook', meta_json: { textLen: text.length, model, persona }, created_at: new Date().toISOString() }])
+      }).catch(() => {});
+    }
+
+    return json({ ok: true, output: answer }, 200, corsHeaders(request, env));
+  } catch (e) {
+    return json({ ok: false, error: String(e?.message || e) }, 500, corsHeaders(request, env));
+  }
+}
+
 function openRouterHeaders(env) {
   const h = { Authorization: `Bearer ${env.OPEN_ROUTER_API_KEY}` };
   if (env.SITE_URL) h["HTTP-Referer"] = env.SITE_URL;
@@ -375,12 +417,15 @@ const INDEX_HTML = `<!doctype html>
     </div>
     <div class="row">
       <button id="send" type="button">Send</button>
+      <button id="mic" type="button">🎙️ Voice Input</button>
+      <button id="speak" type="button">🔊 Speak Last Reply</button>
     </div>
   </div>
 <script>
 (function(){
   function $(id){ return document.getElementById(id); }
-  var term=$("terminal"), statusEl=$("status"), modelEl=$("model"), personaEl=$("persona"), promptEl=$("prompt"), sendBtn=$("send");
+  var term=$("terminal"), statusEl=$("status"), modelEl=$("model"), personaEl=$("persona"), promptEl=$("prompt"), sendBtn=$("send"), micBtn=$("mic"), speakBtn=$("speak");
+  var lastReply='';
 
   function line(cls, txt){
     var p=document.createElement('div');
@@ -464,6 +509,7 @@ const INDEX_HTML = `<!doctype html>
         }
         term.scrollTop=term.scrollHeight;
       }
+      lastReply = out.textContent || '';
       setStatus('ready');
     }catch(e){
       line('e','[ERROR] '+e.message);
@@ -476,6 +522,33 @@ const INDEX_HTML = `<!doctype html>
   $('reload').addEventListener('click', loadModels);
   $('clear').addEventListener('click', function(){ term.innerHTML=''; });
   sendBtn.addEventListener('click', send);
+  if(micBtn){
+    micBtn.addEventListener('click', function(){
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if(!SR){ alert('Speech recognition not supported on this browser'); return; }
+      var rec = new SR();
+      rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 1;
+      setStatus('listening...');
+      rec.onresult = function(ev){
+        var t = ev.results && ev.results[0] && ev.results[0][0] ? ev.results[0][0].transcript : '';
+        if(t){ promptEl.value = (promptEl.value ? (promptEl.value+' ') : '') + t; }
+        setStatus('ready');
+      };
+      rec.onerror = function(){ setStatus('voice error'); };
+      rec.onend = function(){ if(statusEl.textContent==='listening...') setStatus('ready'); };
+      rec.start();
+    });
+  }
+  if(speakBtn){
+    speakBtn.addEventListener('click', function(){
+      if(!lastReply){ alert('No reply yet'); return; }
+      if(!window.speechSynthesis){ alert('TTS not supported'); return; }
+      var u = new SpeechSynthesisUtterance(lastReply);
+      u.rate = 1; u.pitch = 1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    });
+  }
   promptEl.addEventListener('keydown', function(e){
     var isEnter = (e.key==='Enter' || e.keyCode===13 || e.code==='NumpadEnter');
     if(isEnter && !e.shiftKey && !e.isComposing){ e.preventDefault(); send(); }
