@@ -599,7 +599,7 @@ const BUILDER_HTML = `<!doctype html>
       if(n.type==='condition'){
         if(String(vars[n.conditionVar]||input).toLowerCase()!==String(n.conditionValue||'').toLowerCase()) continue;
       }
-      out += '['+n.type+'] '+(n.content||'')+'\n';
+      out += '['+n.type+'] '+(n.content||'')+'\\n';
     }
     return out.trim();
   }
@@ -608,13 +608,13 @@ const BUILDER_HTML = `<!doctype html>
 
   $('addNode').addEventListener('click', addNode);
   $('saveBtn').addEventListener('click', async function(){ state.botName=$('botName').value||'KMN Bot'; var ok=await save(); log(ok?('Saved bot: '+state.botName+' (Supabase)'):('Saved locally (Supabase not ready)'), ok?'ok':'err'); });
-  $('testRun').addEventListener('click', function(){ var o=runFlow($('testInput').value||''); log('FLOW:\n'+o,'ok'); var a=analytics(); a.messages+=1; setAnalytics(a); state.history.push('FLOW>> '+o); $('history').value=state.history.join('\\n'); save(); });
+  $('testRun').addEventListener('click', function(){ var o=runFlow($('testInput').value||''); log('FLOW:\\n'+o,'ok'); var a=analytics(); a.messages+=1; setAnalytics(a); state.history.push('FLOW>> '+o); $('history').value=state.history.join('\\n'); save(); });
   $('sendTest').addEventListener('click', async function(){
     try{
       var text=$('testInput').value||''; if(!text) return;
       log('USER: '+text,'');
       var flow=runFlow(text); if(flow) log('BOT(flow): '+flow,'ok');
-      var ai=await aiReply(text+'\nContext:\n'+flow+'\nKB:\n'+(state.kb||''));
+      var ai=await aiReply(text+'\\nContext:\\n'+flow+'\\nKB:\\n'+(state.kb||''));
       log('BOT(ai): '+ai,'ok');
       var a=analytics(); a.messages+=2; setAnalytics(a);
       state.history.push('U: '+text); state.history.push('B: '+ai); $('history').value=state.history.join('\\n'); save();
