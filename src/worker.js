@@ -11,6 +11,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders(request, env) });
 
     if (url.pathname === "/") return htmlResponse(INDEX_HTML, request, env);
+    if (url.pathname === "/builder") return htmlResponse(BUILDER_HTML, request, env);
     if (url.pathname === "/api/health") return json({ ok: true, service: "kopaing-edge-terminal-chat" }, 200, corsHeaders(request, env));
     if (url.pathname === "/api/models" && request.method === "GET") return handleModels(request, env);
     if (url.pathname === "/api/chat" && request.method === "POST") return handleChat(request, env);
@@ -317,6 +318,269 @@ const INDEX_HTML = `<!doctype html>
 
   loadModels();
   promptEl.focus();
+})();
+</script>
+</body>
+</html>`;
+
+const BUILDER_HTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>KMN Chat Builder</title>
+  <style>
+    :root{--bg:#111;--card:#1a1a1a;--line:#333;--text:#f2e4c8;--gold:#d8b46a;--muted:#b6a27a;--ok:#84d39a;--err:#ff8f8f}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif}
+    .top{padding:12px;border-bottom:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    h1{font-size:18px;margin:0;color:var(--gold)}
+    .grid{display:grid;grid-template-columns:280px 1fr 320px;gap:12px;padding:12px}
+    .card{background:var(--card);border:1px solid var(--line);padding:10px;border-radius:10px}
+    .title{font-weight:700;margin-bottom:8px;color:var(--gold)}
+    input,select,textarea,button{width:100%;background:#121212;color:var(--text);border:1px solid #3b3b3b;border-radius:8px;padding:8px;margin-top:6px}
+    button{cursor:pointer}
+    .row{display:flex;gap:8px}.row>*{flex:1}
+    #nodes{list-style:none;padding:0;margin:0;max-height:52vh;overflow:auto}
+    #nodes li{padding:8px;border:1px solid #3d3d3d;border-radius:8px;margin-bottom:6px;cursor:move;background:#151515}
+    #canvas{min-height:52vh;max-height:52vh;overflow:auto;border:1px dashed #50432a;padding:8px;border-radius:8px}
+    .tag{display:inline-block;padding:2px 8px;border:1px solid #5c4c2f;border-radius:999px;font-size:12px;color:var(--muted)}
+    #log{min-height:180px;max-height:180px;overflow:auto;white-space:pre-wrap;border:1px solid #3b3b3b;padding:8px;border-radius:8px;background:#101010}
+    .ok{color:var(--ok)}.err{color:var(--err)}
+    @media (max-width:1100px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h1>KMN Chat Builder · Art Deco Admin</h1>
+    <span class="tag">Flow Builder</span>
+    <span class="tag">AI + KB + Analytics</span>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <select id="lang" style="width:auto"><option value="en">English</option><option value="my">မြန်မာ</option></select>
+      <button id="saveBtn" style="width:auto">Save Bot</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="title">Admin Dashboard</div>
+      <label>Bot Name<input id="botName" placeholder="Sales Assistant" /></label>
+      <label>Template<select id="templateSel"><option value="blank">Blank</option><option value="faq">FAQ Bot</option><option value="lead">Lead Capture</option></select></label>
+      <button id="applyTemplate">Apply Template</button>
+      <hr style="border-color:#2d2d2d" />
+      <div class="title">Node Toolbox</div>
+      <select id="nodeType">
+        <option value="text">Text</option>
+        <option value="buttons">Buttons</option>
+        <option value="quick_replies">Quick Replies</option>
+        <option value="carousel">Carousel</option>
+        <option value="condition">Condition</option>
+        <option value="ai">AI Response</option>
+      </select>
+      <button id="addNode">Add Node</button>
+      <ul id="nodes"></ul>
+    </div>
+
+    <div class="card">
+      <div class="title">Visual Conversation Flow (Drag & Drop)</div>
+      <div id="canvas"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="testRun">Run Test</button>
+        <button id="clearHistory">Clear History</button>
+      </div>
+      <div class="title" style="margin-top:10px">Testing Playground</div>
+      <div class="row">
+        <input id="testInput" placeholder="User input" />
+        <button id="sendTest" style="max-width:130px">Send</button>
+      </div>
+      <div id="log"></div>
+    </div>
+
+    <div class="card">
+      <div class="title">AI + KB + Widget</div>
+      <label>Model<select id="modelSelect"></select></label>
+      <label>Knowledge Base Upload<input type="file" id="kbFile" multiple /></label>
+      <textarea id="kbPreview" placeholder="KB preview" style="min-height:90px"></textarea>
+      <label>Widget Primary Color<input id="wColor" value="#d8b46a" /></label>
+      <label>Avatar URL<input id="wAvatar" placeholder="https://..." /></label>
+      <label>Position<select id="wPos"><option>bottom-right</option><option>bottom-left</option></select></label>
+      <button id="genEmbed">Generate Embed Code</button>
+      <textarea id="embedOut" style="min-height:100px"></textarea>
+      <div class="title" style="margin-top:8px">Variables & User Context</div>
+      <textarea id="vars" placeholder='{"name":"User"}' style="min-height:80px"></textarea>
+      <div class="title" style="margin-top:8px">Analytics</div>
+      <div id="stats">messages: 0 · users: 0 · drop-off: 0</div>
+      <div class="title" style="margin-top:8px">Conversation History</div>
+      <textarea id="history" style="min-height:100px"></textarea>
+    </div>
+  </div>
+
+<script>
+(function(){
+  var SKEY='kmn_builder_state_v1';
+  var AKEY='kmn_builder_analytics_v1';
+  function $(id){return document.getElementById(id)}
+  var state={botName:'KMN Bot',nodes:[],vars:{},kb:'',history:[]};
+  var dragIndex=-1;
+
+  function uid(){return 'n'+Math.random().toString(36).slice(2,8)}
+  function save(){ localStorage.setItem(SKEY, JSON.stringify(state)); }
+  function load(){
+    try{ var raw=localStorage.getItem(SKEY); if(raw) state=JSON.parse(raw); }catch(e){}
+    if(!state.nodes||!state.nodes.length){ state.nodes=[{id:uid(),type:'text',content:'Welcome! How can I help?'}]; }
+  }
+  function analytics(){
+    var a={messages:0,users:1,dropoff:0};
+    try{ a=JSON.parse(localStorage.getItem(AKEY)||'{"messages":0,"users":1,"dropoff":0}'); }catch(e){}
+    return a;
+  }
+  function setAnalytics(a){ localStorage.setItem(AKEY, JSON.stringify(a)); $('stats').textContent='messages: '+a.messages+' · users: '+a.users+' · drop-off: '+a.dropoff; }
+
+  function renderNodes(){
+    var ul=$('nodes'); ul.innerHTML='';
+    state.nodes.forEach(function(n,i){
+      var li=document.createElement('li'); li.draggable=true; li.dataset.i=i;
+      li.textContent=(i+1)+'. ['+n.type+'] '+(n.content||n.label||'');
+      li.addEventListener('dragstart',function(){dragIndex=i});
+      li.addEventListener('dragover',function(e){e.preventDefault()});
+      li.addEventListener('drop',function(e){e.preventDefault(); var to=i; if(dragIndex<0||dragIndex===to) return; var moved=state.nodes.splice(dragIndex,1)[0]; state.nodes.splice(to,0,moved); dragIndex=-1; save(); renderNodes(); renderCanvas();});
+      li.addEventListener('click',function(){editNode(i)});
+      ul.appendChild(li);
+    });
+  }
+
+  function renderCanvas(){
+    var c=$('canvas'); c.innerHTML='';
+    state.nodes.forEach(function(n,i){
+      var box=document.createElement('div'); box.className='card'; box.style.margin='0 0 8px 0'; box.style.padding='8px';
+      box.innerHTML='<b>'+(i+1)+'. '+n.type+'</b><div>'+escapeHtml(n.content||n.label||'')+'</div>';
+      c.appendChild(box);
+    });
+  }
+
+  function editNode(i){
+    var n=state.nodes[i];
+    var content=prompt('Edit node content', n.content||'');
+    if(content===null) return;
+    n.content=content;
+    if(n.type==='condition'){
+      n.conditionVar=prompt('Condition variable name', n.conditionVar||'intent')||'intent';
+      n.conditionValue=prompt('Condition expected value', n.conditionValue||'yes')||'yes';
+      n.nextNodeId=prompt('Next node id if matched', n.nextNodeId||'')||'';
+    }
+    save(); renderNodes(); renderCanvas();
+  }
+
+  function addNode(){
+    var t=$('nodeType').value;
+    var n={id:uid(),type:t,content:''};
+    if(t==='buttons'||t==='quick_replies') n.content='Option 1 | Option 2';
+    if(t==='carousel') n.content='Card1 | Card2 | Card3';
+    if(t==='ai') n.content='AI dynamic response';
+    if(t==='condition'){ n.content='Branch condition'; n.conditionVar='intent'; n.conditionValue='yes'; }
+    state.nodes.push(n); save(); renderNodes(); renderCanvas();
+  }
+
+  function log(msg, cls){ var d=document.createElement('div'); d.className=cls||''; d.textContent=msg; $('log').appendChild(d); $('log').scrollTop=$('log').scrollHeight; }
+
+  async function loadModels(){
+    try{
+      var res=await fetch('/api/models'); var data=await res.json();
+      var sel=$('modelSelect'); sel.innerHTML='';
+      (data.models||[]).slice(0,80).forEach(function(m){ var o=document.createElement('option'); o.value=m.id; o.textContent=m.id; sel.appendChild(o); });
+    }catch(e){ log('Model load failed: '+e.message,'err'); }
+  }
+
+  async function aiReply(userText){
+    var model=$('modelSelect').value;
+    var res=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:model,prompt:userText})});
+    if(!res.ok||!res.body){ throw new Error('AI request failed'); }
+    var reader=res.body.getReader(); var dec=new TextDecoder(); var buf=''; var out='';
+    while(true){
+      var r=await reader.read(); if(r.done) break;
+      buf+=dec.decode(r.value,{stream:true});
+      var events=buf.split('\\n\\n'); buf=events.pop()||'';
+      for(var i=0;i<events.length;i++){
+        var ev=events[i]; var lines=ev.split('\\n'); var dataLine='';
+        for(var j=0;j<lines.length;j++){ if(lines[j].indexOf('data: ')===0){ dataLine=lines[j].slice(6).trim(); break; } }
+        if(!dataLine || dataLine==='[DONE]') continue;
+        try{ var x=JSON.parse(dataLine); var t=''; if(x&&x.choices&&x.choices[0]&&x.choices[0].delta&&typeof x.choices[0].delta.content==='string') t=x.choices[0].delta.content; if(t) out+=t; }catch(_e){}
+      }
+    }
+    return out;
+  }
+
+  function runFlow(input){
+    var vars={};
+    try{ vars=JSON.parse($('vars').value||'{}'); }catch(e){}
+    var out='';
+    for(var i=0;i<state.nodes.length;i++){
+      var n=state.nodes[i];
+      if(n.type==='condition'){
+        if(String(vars[n.conditionVar]||input).toLowerCase()!==String(n.conditionValue||'').toLowerCase()) continue;
+      }
+      out += '['+n.type+'] '+(n.content||'')+'\n';
+    }
+    return out.trim();
+  }
+
+  function escapeHtml(s){return String(s).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]})}
+
+  $('addNode').addEventListener('click', addNode);
+  $('saveBtn').addEventListener('click', function(){ state.botName=$('botName').value||'KMN Bot'; save(); log('Saved bot: '+state.botName,'ok'); });
+  $('testRun').addEventListener('click', function(){ var o=runFlow($('testInput').value||''); log('FLOW:\n'+o,'ok'); var a=analytics(); a.messages+=1; setAnalytics(a); state.history.push('FLOW>> '+o); $('history').value=state.history.join('\\n'); save(); });
+  $('sendTest').addEventListener('click', async function(){
+    try{
+      var text=$('testInput').value||''; if(!text) return;
+      log('USER: '+text,'');
+      var flow=runFlow(text); if(flow) log('BOT(flow): '+flow,'ok');
+      var ai=await aiReply(text+'\nContext:\n'+flow+'\nKB:\n'+(state.kb||''));
+      log('BOT(ai): '+ai,'ok');
+      var a=analytics(); a.messages+=2; setAnalytics(a);
+      state.history.push('U: '+text); state.history.push('B: '+ai); $('history').value=state.history.join('\\n'); save();
+    }catch(e){ log('Error: '+e.message,'err'); var a=analytics(); a.dropoff+=1; setAnalytics(a); }
+  });
+
+  $('clearHistory').addEventListener('click', function(){ state.history=[]; $('history').value=''; save(); log('history cleared','ok'); });
+  $('kbFile').addEventListener('change', function(e){
+    var files=e.target.files||[]; if(!files.length) return;
+    var remain=files.length; var merged=[];
+    for(var i=0;i<files.length;i++){
+      (function(f){ var r=new FileReader(); r.onload=function(){ merged.push('## '+f.name+'\\n'+String(r.result||'')); remain--; if(remain===0){ state.kb=merged.join('\\n\\n'); $('kbPreview').value=state.kb.slice(0,4000); save(); log('KB uploaded: '+files.length+' files','ok'); } }; r.readAsText(f); })(files[i]);
+    }
+  });
+
+  $('genEmbed').addEventListener('click', function(){
+    var cfg={color:$('wColor').value,avatar:$('wAvatar').value,position:$('wPos').value,bot:state.botName};
+    var code='<script src="https://kmnchat.mymyanmarland.workers.dev/widget.js" data-bot="'+cfg.bot+'" data-color="'+cfg.color+'" data-avatar="'+cfg.avatar+'" data-position="'+cfg.position+'"><\\/script>';
+    $('embedOut').value=code;
+  });
+
+  $('applyTemplate').addEventListener('click', function(){
+    var t=$('templateSel').value;
+    if(t==='faq') state.nodes=[{id:uid(),type:'text',content:'Hello! Ask me anything about pricing or hours.'},{id:uid(),type:'quick_replies',content:'Pricing | Hours | Contact'},{id:uid(),type:'ai',content:'AI fallback'}];
+    else if(t==='lead') state.nodes=[{id:uid(),type:'text',content:'Hi! Can I get your name?'},{id:uid(),type:'buttons',content:'Yes | Later'},{id:uid(),type:'condition',content:'if yes go next',conditionVar:'intent',conditionValue:'yes'}];
+    else state.nodes=[{id:uid(),type:'text',content:'Welcome! How can I help?'}];
+    save(); renderNodes(); renderCanvas(); log('Template applied: '+t,'ok');
+  });
+
+  $('lang').addEventListener('change', function(){
+    var my=this.value==='my';
+    document.title=my?'KMN ချတ်တည်ဆောက်မှု':'KMN Chat Builder';
+    $('saveBtn').textContent=my?'သိမ်းမယ်':'Save Bot';
+    $('addNode').textContent=my?'Node ထည့်မယ်':'Add Node';
+    $('testRun').textContent=my?'စမ်းမယ်':'Run Test';
+    $('sendTest').textContent=my?'ပို့မယ်':'Send';
+  });
+
+  load();
+  $('botName').value=state.botName||'KMN Bot';
+  $('kbPreview').value=state.kb||'';
+  $('history').value=(state.history||[]).join('\\n');
+  $('vars').value=JSON.stringify(state.vars||{name:'Guest'},null,2);
+  setAnalytics(analytics());
+  renderNodes();
+  renderCanvas();
+  loadModels();
 })();
 </script>
 </body>
