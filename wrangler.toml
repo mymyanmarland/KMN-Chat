@@ -1,0 +1,10 @@
+name = "kopaing-edge-terminal-chat"
+main = "src/worker.js"
+compatibility_date = "2026-02-17"
+
+[vars]
+SITE_NAME = "Ko Paing Edge Terminal"
+# SITE_URL = "https://your-domain.example"
+# ALLOWED_ORIGIN = "https://your-domain.example"
+# OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# MODELS_CACHE_TTL_MS = "300000"
