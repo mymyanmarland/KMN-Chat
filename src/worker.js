@@ -178,19 +178,26 @@ const INDEX_HTML = `<!doctype html>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>KMN Chat</title>
   <style>
-    body{margin:0;background:#000;color:#7CFF7C;font-family:monospace}
-    .wrap{max-width:900px;margin:0 auto;padding:12px}
+    :root{--bg:#0f0c08;--panel:#17120c;--line:#6e5a3a;--gold:#d9b46b;--ivory:#f3e6c9;--accent:#f0c674;--err:#ff7a7a;--info:#9bc8ff}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(circle at top,#241a10,#0f0c08 55%);color:var(--ivory);font-family:Georgia,"Times New Roman",serif;letter-spacing:.2px}
+    .wrap{max-width:960px;margin:22px auto;padding:14px;border:2px solid var(--line);background:linear-gradient(180deg,rgba(255,220,160,.04),rgba(0,0,0,.08));box-shadow:0 0 0 1px rgba(217,180,107,.2) inset}
+    h3{margin:0 0 10px;text-align:center;color:var(--gold);font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+    #status{margin:0 0 10px;padding:6px 8px;border:1px solid var(--line);background:#120e09;color:var(--accent)}
     .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-    select,textarea,button{background:#050505;color:#7CFF7C;border:1px solid #1f5f1f;font-family:monospace}
-    textarea{width:100%;min-height:90px;padding:8px}
-    button,select{padding:8px}
-    #terminal{white-space:pre-wrap;word-break:break-word;min-height:50vh;border:1px solid #1f5f1f;padding:10px}
-    .u{color:#9cd7ff}.e{color:#ff6b6b}
+    select,textarea,button{background:#120e09;color:var(--ivory);border:1px solid var(--line);font-family:Georgia,"Times New Roman",serif}
+    select,button{padding:8px 10px}
+    button{cursor:pointer}
+    button:hover{background:#1e1710;border-color:var(--gold)}
+    textarea{width:100%;min-height:90px;padding:10px;line-height:1.45}
+    #terminal{white-space:pre-wrap;word-break:break-word;min-height:50vh;border:1px solid var(--line);padding:12px;background:repeating-linear-gradient(180deg,#130f0a,#130f0a 30px,#151009 30px,#151009 31px)}
+    .u{color:var(--info)}
+    .e{color:var(--err)}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h3>KMN Chat // Ko Paing</h3>
+    <h3>KMN Chat · Art Deco Console</h3>
     <div id="status">loading models...</div>
     <div class="row">
       <select id="model"></select>
