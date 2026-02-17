@@ -270,11 +270,11 @@ const INDEX_HTML = `<!doctype html>
         var r=await reader.read();
         if(r.done) break;
         buf+=dec.decode(r.value,{stream:true});
-        var events=buf.split('\n\n');
+        var events=buf.split('\\n\\n');
         buf=events.pop()||'';
         for(var i=0;i<events.length;i++){
           var ev=events[i];
-          var lines=ev.split('\n');
+          var lines=ev.split('\\n');
           var dataLine='';
           for(var j=0;j<lines.length;j++){
             if(lines[j].indexOf('data: ')===0){ dataLine=lines[j].slice(6).trim(); break; }
