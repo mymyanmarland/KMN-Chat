@@ -257,7 +257,13 @@ async function send(){
 $('reload').addEventListener('click', loadModels);
 $('clear').addEventListener('click', ()=>term.innerHTML='');
 sendBtn.addEventListener('click', send);
-promptEl.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+promptEl.addEventListener('keydown',(e)=>{
+  const isEnter = (e.key === 'Enter' || e.keyCode === 13 || e.code === 'NumpadEnter');
+  if(isEnter && !e.shiftKey && !e.isComposing){
+    e.preventDefault();
+    send();
+  }
+});
 loadModels(); promptEl.focus();
 </script>
 </body></html>`;
