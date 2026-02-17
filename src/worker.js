@@ -15,6 +15,8 @@ export default {
     if (url.pathname === "/api/health") return json({ ok: true, service: "kopaing-edge-terminal-chat" }, 200, corsHeaders(request, env));
     if (url.pathname === "/api/models" && request.method === "GET") return handleModels(request, env);
     if (url.pathname === "/api/chat" && request.method === "POST") return handleChat(request, env);
+    if (url.pathname === "/api/builder/state" && request.method === "GET") return handleBuilderStateGet(request, env);
+    if (url.pathname === "/api/builder/state" && request.method === "POST") return handleBuilderStatePost(request, env);
 
     return json({ error: "Not found" }, 404, corsHeaders(request, env));
   },
@@ -129,11 +131,70 @@ async function handleChat(request, env) {
   }
 }
 
+async function handleBuilderStateGet(request, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    return json({ ok: false, code: "SUPABASE_NOT_CONFIGURED" }, 200, corsHeaders(request, env));
+  }
+
+  const url = new URL(request.url);
+  const bot = (url.searchParams.get("bot") || "default").trim();
+
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/builder_states?bot=eq.${encodeURIComponent(bot)}&select=bot,state_json,updated_at&limit=1`, {
+      headers: supabaseHeaders(env),
+    });
+    const arr = await res.json();
+    if (!res.ok) return json({ ok: false, error: arr }, 500, corsHeaders(request, env));
+    return json({ ok: true, state: Array.isArray(arr) && arr[0] ? arr[0].state_json : null }, 200, corsHeaders(request, env));
+  } catch (e) {
+    return json({ ok: false, error: String(e?.message || e) }, 500, corsHeaders(request, env));
+  }
+}
+
+async function handleBuilderStatePost(request, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    return json({ ok: false, code: "SUPABASE_NOT_CONFIGURED" }, 200, corsHeaders(request, env));
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400, corsHeaders(request, env));
+  }
+
+  const bot = String(body?.bot || "default").trim();
+  const state = body?.state;
+  if (!bot || !state) return json({ ok: false, error: "bot/state required" }, 400, corsHeaders(request, env));
+
+  try {
+    const payload = [{ bot, state_json: state, updated_at: new Date().toISOString() }];
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/builder_states?on_conflict=bot`, {
+      method: "POST",
+      headers: { ...supabaseHeaders(env), "content-type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return json({ ok: false, error: data }, 500, corsHeaders(request, env));
+    return json({ ok: true, data }, 200, corsHeaders(request, env));
+  } catch (e) {
+    return json({ ok: false, error: String(e?.message || e) }, 500, corsHeaders(request, env));
+  }
+}
+
 function openRouterHeaders(env) {
   const h = { Authorization: `Bearer ${env.OPEN_ROUTER_API_KEY}` };
   if (env.SITE_URL) h["HTTP-Referer"] = env.SITE_URL;
   if (env.SITE_NAME) h["X-Title"] = env.SITE_NAME;
   return h;
+}
+
+function supabaseHeaders(env) {
+  return {
+    apikey: env.SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+    "content-type": "application/json",
+  };
 }
 
 function fallbackModels() {
@@ -423,10 +484,30 @@ const BUILDER_HTML = `<!doctype html>
   var dragIndex=-1;
 
   function uid(){return 'n'+Math.random().toString(36).slice(2,8)}
-  function save(){ localStorage.setItem(SKEY, JSON.stringify(state)); }
-  function load(){
+  function currentBot(){ return ($('botName').value||state.botName||'KMN Bot').trim() || 'KMN Bot'; }
+  function saveLocal(){ localStorage.setItem(SKEY, JSON.stringify(state)); }
+  async function saveRemote(){
+    try{
+      var res = await fetch('/api/builder/state',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({bot:currentBot(),state:state})});
+      var data = await res.json().catch(function(){return {};});
+      return !!(res.ok && data && data.ok);
+    }catch(e){ return false; }
+  }
+  async function save(){
+    saveLocal();
+    return await saveRemote();
+  }
+  function loadLocal(){
     try{ var raw=localStorage.getItem(SKEY); if(raw) state=JSON.parse(raw); }catch(e){}
     if(!state.nodes||!state.nodes.length){ state.nodes=[{id:uid(),type:'text',content:'Welcome! How can I help?'}]; }
+  }
+  async function loadRemote(){
+    try{
+      var res = await fetch('/api/builder/state?bot='+encodeURIComponent(currentBot()));
+      var data = await res.json().catch(function(){return {};});
+      if(res.ok && data && data.ok && data.state){ state = data.state; return true; }
+    }catch(e){}
+    return false;
   }
   function analytics(){
     var a={messages:0,users:1,dropoff:0};
@@ -526,7 +607,7 @@ const BUILDER_HTML = `<!doctype html>
   function escapeHtml(s){return String(s).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]})}
 
   $('addNode').addEventListener('click', addNode);
-  $('saveBtn').addEventListener('click', function(){ state.botName=$('botName').value||'KMN Bot'; save(); log('Saved bot: '+state.botName,'ok'); });
+  $('saveBtn').addEventListener('click', async function(){ state.botName=$('botName').value||'KMN Bot'; var ok=await save(); log(ok?('Saved bot: '+state.botName+' (Supabase)'):('Saved locally (Supabase not ready)'), ok?'ok':'err'); });
   $('testRun').addEventListener('click', function(){ var o=runFlow($('testInput').value||''); log('FLOW:\n'+o,'ok'); var a=analytics(); a.messages+=1; setAnalytics(a); state.history.push('FLOW>> '+o); $('history').value=state.history.join('\\n'); save(); });
   $('sendTest').addEventListener('click', async function(){
     try{
@@ -572,15 +653,20 @@ const BUILDER_HTML = `<!doctype html>
     $('sendTest').textContent=my?'ပို့မယ်':'Send';
   });
 
-  load();
-  $('botName').value=state.botName||'KMN Bot';
-  $('kbPreview').value=state.kb||'';
-  $('history').value=(state.history||[]).join('\\n');
-  $('vars').value=JSON.stringify(state.vars||{name:'Guest'},null,2);
-  setAnalytics(analytics());
-  renderNodes();
-  renderCanvas();
-  loadModels();
+  (async function init(){
+    loadLocal();
+    $('botName').value=state.botName||'KMN Bot';
+    var remoteLoaded = await loadRemote();
+    if(remoteLoaded){ log('Loaded bot state from Supabase','ok'); }
+    $('botName').value=state.botName||$('botName').value||'KMN Bot';
+    $('kbPreview').value=state.kb||'';
+    $('history').value=(state.history||[]).join('\\n');
+    $('vars').value=JSON.stringify(state.vars||{name:'Guest'},null,2);
+    setAnalytics(analytics());
+    renderNodes();
+    renderCanvas();
+    loadModels();
+  })();
 })();
 </script>
 </body>
