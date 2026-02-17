@@ -183,11 +183,10 @@ const INDEX_HTML = `<!doctype html>
       --font: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     }
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;display:flex;flex-direction:column}
-    body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.08;background:repeating-linear-gradient(0deg,#0f0 0 1px,transparent 1px 3px)}
-    header{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px;border-bottom:1px solid #154215;background:var(--panel)}
-    #terminal{flex:1;overflow:auto;padding:12px;white-space:pre-wrap;word-break:break-word}
+    header{position:relative;z-index:2;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px;border-bottom:1px solid #154215;background:var(--panel)}
+    #terminal{position:relative;z-index:2;flex:1;overflow:auto;padding:12px;white-space:pre-wrap;word-break:break-word}
     .line{margin:0 0 10px}.u{color:#9cd7ff}.a{color:var(--text)}.e{color:var(--err)}
-    .row{display:flex;gap:8px;padding:10px;border-top:1px solid #154215;background:var(--panel)}
+    .row{position:relative;z-index:2;display:flex;gap:8px;padding:10px;border-top:1px solid #154215;background:var(--panel)}
     select,textarea,button{background:#000;border:1px solid #1b501b;color:var(--text);font-family:var(--font)}
     textarea{flex:1;min-height:68px;padding:8px} button,select{padding:8px}
     @media (max-width:700px){.row{flex-direction:column}}
