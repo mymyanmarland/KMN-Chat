@@ -17,6 +17,11 @@ export default {
     if (url.pathname === "/api/chat" && request.method === "POST") return handleChat(request, env);
     if (url.pathname === "/api/builder/state" && request.method === "GET") return handleBuilderStateGet(request, env);
     if (url.pathname === "/api/builder/state" && request.method === "POST") return handleBuilderStatePost(request, env);
+    if (url.pathname === "/api/memory" && request.method === "GET") return handleMemoryGet(request, env);
+    if (url.pathname === "/api/memory" && request.method === "POST") return handleMemoryPost(request, env);
+    if (url.pathname === "/widget.js" && request.method === "GET") {
+      return new Response(WIDGET_JS, { headers: { "content-type": "application/javascript; charset=utf-8", ...corsHeaders(request, env) } });
+    }
 
     return json({ error: "Not found" }, 404, corsHeaders(request, env));
   },
@@ -172,6 +177,41 @@ async function handleBuilderStatePost(request, env) {
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/builder_states?on_conflict=bot`, {
       method: "POST",
       headers: { ...supabaseHeaders(env), "content-type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return json({ ok: false, error: data }, 500, corsHeaders(request, env));
+    return json({ ok: true, data }, 200, corsHeaders(request, env));
+  } catch (e) {
+    return json({ ok: false, error: String(e?.message || e) }, 500, corsHeaders(request, env));
+  }
+}
+
+async function handleMemoryGet(request, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return json({ ok: false, code: "SUPABASE_NOT_CONFIGURED" }, 200, corsHeaders(request, env));
+  const url = new URL(request.url);
+  const userId = (url.searchParams.get("userId") || "guest").trim();
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/user_memory?user_id=eq.${encodeURIComponent(userId)}&select=user_id,memory_json,updated_at&limit=1`, { headers: supabaseHeaders(env) });
+    const arr = await res.json();
+    if (!res.ok) return json({ ok: false, error: arr }, 500, corsHeaders(request, env));
+    return json({ ok: true, memory: Array.isArray(arr) && arr[0] ? arr[0].memory_json : {} }, 200, corsHeaders(request, env));
+  } catch (e) {
+    return json({ ok: false, error: String(e?.message || e) }, 500, corsHeaders(request, env));
+  }
+}
+
+async function handleMemoryPost(request, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return json({ ok: false, code: "SUPABASE_NOT_CONFIGURED" }, 200, corsHeaders(request, env));
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: "invalid json" }, 400, corsHeaders(request, env)); }
+  const userId = String(body?.userId || "guest").trim();
+  const memory = body?.memory || {};
+  try {
+    const payload = [{ user_id: userId, memory_json: memory, updated_at: new Date().toISOString() }];
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/user_memory?on_conflict=user_id`, {
+      method: "POST",
+      headers: { ...supabaseHeaders(env), Prefer: "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
@@ -671,3 +711,49 @@ const BUILDER_HTML = `<!doctype html>
 </script>
 </body>
 </html>`;
+
+const WIDGET_JS = `(function(){
+  var s=document.currentScript||{};
+  var host=(s.src||'').split('/widget.js')[0]||location.origin;
+  var color=s.getAttribute('data-color')||'#d8b46a';
+  var pos=s.getAttribute('data-position')||'bottom-right';
+  var bot=s.getAttribute('data-bot')||'KMN Bot';
+  var userId=localStorage.getItem('kmn_widget_user')||('u_'+Math.random().toString(36).slice(2,10));
+  localStorage.setItem('kmn_widget_user',userId);
+
+  var wrap=document.createElement('div');
+  wrap.style.position='fixed'; wrap.style.zIndex='999999'; wrap.style[pos.indexOf('left')>-1?'left':'right']='16px'; wrap.style.bottom='16px';
+  var btn=document.createElement('button');
+  btn.textContent='💬 '+bot; btn.style.background=color; btn.style.color='#111'; btn.style.border='0'; btn.style.padding='10px 12px'; btn.style.borderRadius='999px'; btn.style.cursor='pointer';
+  var panel=document.createElement('div');
+  panel.style.display='none'; panel.style.width='320px'; panel.style.height='420px'; panel.style.background='#111'; panel.style.color='#f3e6c9'; panel.style.border='1px solid #6e5a3a'; panel.style.borderRadius='12px'; panel.style.padding='8px'; panel.style.marginTop='8px';
+  panel.innerHTML='<div style="font-weight:bold;color:'+color+';margin-bottom:6px">'+bot+'</div><div id="kmn_log" style="height:310px;overflow:auto;border:1px solid #333;padding:6px"></div><div style="display:flex;gap:6px;margin-top:6px"><input id="kmn_in" style="flex:1;background:#1a1a1a;color:#f3e6c9;border:1px solid #333;padding:8px" placeholder="Type..."/><button id="kmn_send" style="background:'+color+';border:0;padding:8px 10px">Send</button></div>';
+  wrap.appendChild(btn); wrap.appendChild(panel); document.body.appendChild(wrap);
+
+  function log(t,c){ var d=document.createElement('div'); d.textContent=t; if(c) d.style.color=c; var l=panel.querySelector('#kmn_log'); l.appendChild(d); l.scrollTop=l.scrollHeight; }
+
+  async function loadMemory(){
+    try{ var r=await fetch(host+'/api/memory?userId='+encodeURIComponent(userId)); var j=await r.json(); return j.memory||{}; }catch(e){ return {}; }
+  }
+  async function saveMemory(m){
+    try{ await fetch(host+'/api/memory',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({userId:userId,memory:m})}); }catch(e){}
+  }
+
+  async function send(){
+    var input=panel.querySelector('#kmn_in');
+    var text=(input.value||'').trim(); if(!text) return; input.value=''; log('You: '+text,'#9bc8ff');
+    var mem=await loadMemory();
+    if(text.toLowerCase().indexOf('my name is')===0){ mem.name=text.slice(10).trim(); await saveMemory(mem); }
+    var prompt='User memory: '+JSON.stringify(mem)+'\\nUser: '+text;
+    var model='openai/gpt-4o-mini';
+    var res=await fetch(host+'/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:model,prompt:prompt})});
+    if(!res.ok||!res.body){ log('Bot: error','#ff8f8f'); return; }
+    var reader=res.body.getReader(), dec=new TextDecoder(), buf='', out='';
+    while(true){ var rr=await reader.read(); if(rr.done) break; buf+=dec.decode(rr.value,{stream:true}); var evs=buf.split('\\n\\n'); buf=evs.pop()||''; for(var i=0;i<evs.length;i++){ var line=(evs[i].split('\\n').find(function(x){return x.indexOf('data: ')===0;})||'').slice(6).trim(); if(!line||line==='[DONE]') continue; try{ var j=JSON.parse(line); var t=(j&&j.choices&&j.choices[0]&&j.choices[0].delta&&typeof j.choices[0].delta.content==='string')?j.choices[0].delta.content:''; if(t) out+=t; }catch(e){} } }
+    log('Bot: '+out,'#f3e6c9');
+  }
+
+  btn.onclick=function(){ panel.style.display=panel.style.display==='none'?'block':'none'; };
+  panel.querySelector('#kmn_send').onclick=send;
+  panel.querySelector('#kmn_in').addEventListener('keydown',function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); }});
+})();`;
