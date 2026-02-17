@@ -19,6 +19,8 @@ export default {
     if (url.pathname === "/api/builder/state" && request.method === "POST") return handleBuilderStatePost(request, env);
     if (url.pathname === "/api/memory" && request.method === "GET") return handleMemoryGet(request, env);
     if (url.pathname === "/api/memory" && request.method === "POST") return handleMemoryPost(request, env);
+    if (url.pathname === "/api/analytics/event" && request.method === "POST") return handleAnalyticsEventPost(request, env);
+    if (url.pathname === "/api/analytics/summary" && request.method === "GET") return handleAnalyticsSummaryGet(request, env);
     if (url.pathname === "/widget.js" && request.method === "GET") {
       return new Response(WIDGET_JS, { headers: { "content-type": "application/javascript; charset=utf-8", ...corsHeaders(request, env) } });
     }
@@ -81,6 +83,7 @@ async function handleChat(request, env) {
 
   const model = String(body?.model || "").trim();
   const prompt = String(body?.prompt || "").trim();
+  const persona = String(body?.persona || "default").trim();
 
   if (!model) return json({ error: "model is required" }, 400, corsHeaders(request, env));
   if (!prompt) return json({ error: "prompt is required" }, 400, corsHeaders(request, env));
@@ -105,7 +108,7 @@ async function handleChat(request, env) {
         messages: [
           {
             role: "system",
-            content: "You are Ko Paing style assistant: concise, practical, safe."
+            content: personaPrompt(persona)
           },
           { role: "user", content: prompt }
         ]
@@ -222,6 +225,52 @@ async function handleMemoryPost(request, env) {
   }
 }
 
+async function handleAnalyticsEventPost(request, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return json({ ok: false, code: "SUPABASE_NOT_CONFIGURED" }, 200, corsHeaders(request, env));
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: "invalid json" }, 400, corsHeaders(request, env)); }
+  const payload = [{
+    event_type: String(body?.eventType || 'message').slice(0, 64),
+    user_id: String(body?.userId || 'guest').slice(0, 128),
+    session_id: String(body?.sessionId || 'session').slice(0, 128),
+    node_id: String(body?.nodeId || '').slice(0, 128),
+    meta_json: body?.meta || {},
+    created_at: new Date().toISOString()
+  }];
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/analytics_events`, {
+      method: 'POST',
+      headers: { ...supabaseHeaders(env), Prefer: 'return=minimal' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) return json({ ok: false, error: await res.text() }, 500, corsHeaders(request, env));
+    return json({ ok: true }, 200, corsHeaders(request, env));
+  } catch (e) {
+    return json({ ok: false, error: String(e?.message || e) }, 500, corsHeaders(request, env));
+  }
+}
+
+async function handleAnalyticsSummaryGet(request, env) {
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return json({ ok: false, code: "SUPABASE_NOT_CONFIGURED" }, 200, corsHeaders(request, env));
+  try {
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/analytics_events?select=event_type,user_id,node_id,created_at&order=created_at.desc&limit=1000`, { headers: supabaseHeaders(env) });
+    const rows = await res.json();
+    if (!res.ok) return json({ ok: false, error: rows }, 500, corsHeaders(request, env));
+    const events = Array.isArray(rows) ? rows : [];
+    const messages = events.filter(r => r.event_type === 'message').length;
+    const users = new Set(events.map(r => r.user_id)).size;
+    const dropoff = events.filter(r => r.event_type === 'dropoff').length;
+    const byNode = {};
+    for (const e of events) {
+      const k = e.node_id || 'unknown';
+      byNode[k] = (byNode[k] || 0) + 1;
+    }
+    return json({ ok: true, summary: { messages, users, dropoff, byNode } }, 200, corsHeaders(request, env));
+  } catch (e) {
+    return json({ ok: false, error: String(e?.message || e) }, 500, corsHeaders(request, env));
+  }
+}
+
 function openRouterHeaders(env) {
   const h = { Authorization: `Bearer ${env.OPEN_ROUTER_API_KEY}` };
   if (env.SITE_URL) h["HTTP-Referer"] = env.SITE_URL;
@@ -243,6 +292,14 @@ function fallbackModels() {
     { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash" },
     { id: "anthropic/claude-3.5-haiku", name: "Claude 3.5 Haiku" }
   ];
+}
+
+function personaPrompt(persona) {
+  const p = (persona || 'default').toLowerCase();
+  if (p === 'sales') return 'You are a sales assistant. Be persuasive, concise, and CTA-driven while staying honest.';
+  if (p === 'tutor') return 'You are a tutor. Explain step-by-step, ask check questions, and adapt to learner level.';
+  if (p === 'support') return 'You are a customer support agent. Be calm, precise, and solution-first.';
+  return 'You are Ko Paing style assistant: concise, practical, safe.';
 }
 
 function corsHeaders(request, env) {
@@ -303,6 +360,12 @@ const INDEX_HTML = `<!doctype html>
     <div id="status">loading models...</div>
     <div class="row">
       <select id="model"></select>
+      <select id="persona">
+        <option value="default">Persona: Default</option>
+        <option value="sales">Persona: Sales</option>
+        <option value="tutor">Persona: Tutor</option>
+        <option value="support">Persona: Support</option>
+      </select>
       <button id="reload" type="button">Reload Models</button>
       <button id="clear" type="button">Clear</button>
     </div>
@@ -317,7 +380,7 @@ const INDEX_HTML = `<!doctype html>
 <script>
 (function(){
   function $(id){ return document.getElementById(id); }
-  var term=$("terminal"), statusEl=$("status"), modelEl=$("model"), promptEl=$("prompt"), sendBtn=$("send");
+  var term=$("terminal"), statusEl=$("status"), modelEl=$("model"), personaEl=$("persona"), promptEl=$("prompt"), sendBtn=$("send");
 
   function line(cls, txt){
     var p=document.createElement('div');
@@ -361,10 +424,11 @@ const INDEX_HTML = `<!doctype html>
     sendBtn.disabled=true;
 
     try{
+      var persona=(personaEl && personaEl.value) ? personaEl.value : 'default';
       var res=await fetch('/api/chat',{
         method:'POST',
         headers:{'content-type':'application/json'},
-        body:JSON.stringify({model:model,prompt:prompt})
+        body:JSON.stringify({model:model,prompt:prompt,persona:persona})
       });
 
       if(!res.ok || !res.body){
@@ -555,6 +619,20 @@ const BUILDER_HTML = `<!doctype html>
     return a;
   }
   function setAnalytics(a){ localStorage.setItem(AKEY, JSON.stringify(a)); $('stats').textContent='messages: '+a.messages+' · users: '+a.users+' · drop-off: '+a.dropoff; }
+  async function postEvent(eventType, nodeId, meta){
+    try{ await fetch('/api/analytics/event',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({eventType:eventType,userId:'builder-admin',sessionId:'builder',nodeId:nodeId||'',meta:meta||{}})}); }catch(e){}
+  }
+  async function refreshAnalytics(){
+    try{
+      var r=await fetch('/api/analytics/summary');
+      var j=await r.json().catch(function(){return {};});
+      if(r.ok && j && j.ok && j.summary){
+        $('stats').textContent='messages: '+j.summary.messages+' · users: '+j.summary.users+' · drop-off: '+j.summary.dropoff;
+        return;
+      }
+    }catch(e){}
+    setAnalytics(analytics());
+  }
 
   function renderNodes(){
     var ul=$('nodes'); ul.innerHTML='';
@@ -648,7 +726,7 @@ const BUILDER_HTML = `<!doctype html>
 
   $('addNode').addEventListener('click', addNode);
   $('saveBtn').addEventListener('click', async function(){ state.botName=$('botName').value||'KMN Bot'; var ok=await save(); log(ok?('Saved bot: '+state.botName+' (Supabase)'):('Saved locally (Supabase not ready)'), ok?'ok':'err'); });
-  $('testRun').addEventListener('click', function(){ var o=runFlow($('testInput').value||''); log('FLOW:\\n'+o,'ok'); var a=analytics(); a.messages+=1; setAnalytics(a); state.history.push('FLOW>> '+o); $('history').value=state.history.join('\\n'); save(); });
+  $('testRun').addEventListener('click', async function(){ var o=runFlow($('testInput').value||''); log('FLOW:\\n'+o,'ok'); var a=analytics(); a.messages+=1; setAnalytics(a); await postEvent('message','flow-test',{len:o.length}); state.history.push('FLOW>> '+o); $('history').value=state.history.join('\\n'); save(); refreshAnalytics(); });
   $('sendTest').addEventListener('click', async function(){
     try{
       var text=$('testInput').value||''; if(!text) return;
@@ -657,8 +735,9 @@ const BUILDER_HTML = `<!doctype html>
       var ai=await aiReply(text+'\\nContext:\\n'+flow+'\\nKB:\\n'+(state.kb||''));
       log('BOT(ai): '+ai,'ok');
       var a=analytics(); a.messages+=2; setAnalytics(a);
-      state.history.push('U: '+text); state.history.push('B: '+ai); $('history').value=state.history.join('\\n'); save();
-    }catch(e){ log('Error: '+e.message,'err'); var a=analytics(); a.dropoff+=1; setAnalytics(a); }
+      await postEvent('message','send-test',{textLen:text.length});
+      state.history.push('U: '+text); state.history.push('B: '+ai); $('history').value=state.history.join('\\n'); save(); refreshAnalytics();
+    }catch(e){ log('Error: '+e.message,'err'); var a=analytics(); a.dropoff+=1; setAnalytics(a); await postEvent('dropoff','send-test',{error:String(e&&e.message||e)}); refreshAnalytics(); }
   });
 
   $('clearHistory').addEventListener('click', function(){ state.history=[]; $('history').value=''; save(); log('history cleared','ok'); });
@@ -702,7 +781,7 @@ const BUILDER_HTML = `<!doctype html>
     $('kbPreview').value=state.kb||'';
     $('history').value=(state.history||[]).join('\\n');
     $('vars').value=JSON.stringify(state.vars||{name:'Guest'},null,2);
-    setAnalytics(analytics());
+    await refreshAnalytics();
     renderNodes();
     renderCanvas();
     loadModels();
